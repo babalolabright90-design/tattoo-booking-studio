@@ -1,0 +1,278 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// User (Admin)
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  passwordHash  String
+  name          String?
+  role          String    @default("admin")
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([email])
+}
+
+// Artist
+model Artist {
+  id            String    @id @default(cuid())
+  name          String
+  bio           String?
+  profilePhoto  String?   // Cloudinary URL
+  specialties   String[]  @default([]) // JSON array of tattoo styles
+  phone         String?
+  email         String?
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  portfolio     Portfolio[]
+  bookings      Booking[]
+  availability  Availability[]
+  blockedDates  BlockedDate[]
+
+  @@index([isActive])
+}
+
+// Customer/Client
+model Customer {
+  id            String    @id @default(cuid())
+  firstName     String
+  lastName      String
+  email         String    @unique
+  phone         String
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  bookings      Booking[]
+  payments      Payment[]
+
+  @@index([email])
+}
+
+// Booking/Appointment
+model Booking {
+  id                String    @id @default(cuid())
+  customerId        String
+  customer          Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  artistId          String
+  artist            Artist    @relation(fields: [artistId], references: [id])
+  
+  // Tattoo Details
+  tattooStyle       String
+  placement         String
+  size              String
+  colorOrBlackGrey  String
+  description       String
+  referenceImage    String?   // Cloudinary URL
+  
+  // Booking Details
+  status            String    @default("pending") // pending, confirmed, deposit_required, deposit_paid, completed, cancelled, rejected
+  appointmentDate   DateTime
+  appointmentTime   String    // HH:MM format
+  estimatedDuration Int       // in minutes
+  
+  // Preferences
+  preferredDate     DateTime?
+  alternativeDate   DateTime?
+  budget            Float?
+  notes             String?
+  adminNotes        String?
+  
+  // Payment
+  depositAmount     Float?
+  depositPaid       Boolean   @default(false)
+  totalPrice        Float?
+  
+  createdAt         DateTime  @default(now())
+  updatedAt         DateTime  @updatedAt
+  
+  payments          Payment[]
+  notifications     Notification[]
+
+  @@index([customerId])
+  @@index([artistId])
+  @@index([status])
+  @@index([appointmentDate])
+  @@unique([artistId, appointmentDate, appointmentTime])
+}
+
+// Service
+model Service {
+  id            String    @id @default(cuid())
+  name          String
+  description   String?
+  basePrice     Float
+  duration      Int       // in minutes
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([isActive])
+}
+
+// Portfolio/Tattoo Images
+model Portfolio {
+  id            String    @id @default(cuid())
+  title         String
+  description   String?
+  imageUrl      String    // Cloudinary URL
+  thumbnailUrl  String?   // Cloudinary URL
+  style         String    // Black & Grey, Realism, Fine Line, etc.
+  placement     String?
+  artistId      String
+  artist        Artist    @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  categoryId    String?
+  category      PortfolioCategory? @relation(fields: [categoryId], references: [id])
+  tags          String[]  @default([])
+  date          DateTime?
+  featured      Boolean   @default(false)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([artistId])
+  @@index([style])
+  @@index([featured])
+}
+
+// Portfolio Category
+model PortfolioCategory {
+  id            String    @id @default(cuid())
+  name          String    @unique
+  slug          String    @unique
+  description   String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  portfolios    Portfolio[]
+}
+
+// Artist Availability
+model Availability {
+  id            String    @id @default(cuid())
+  artistId      String
+  artist        Artist    @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  dayOfWeek     Int       // 0-6 (Sunday-Saturday)
+  startTime     String    // HH:MM format
+  endTime       String    // HH:MM format
+  isActive      Boolean   @default(true)
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@unique([artistId, dayOfWeek])
+  @@index([artistId])
+}
+
+// Blocked Dates (Vacation, Breaks)
+model BlockedDate {
+  id            String    @id @default(cuid())
+  artistId      String
+  artist        Artist    @relation(fields: [artistId], references: [id], onDelete: Cascade)
+  startDate     DateTime
+  endDate       DateTime
+  reason        String?   // Vacation, Holiday, etc.
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([artistId])
+  @@index([startDate])
+}
+
+// Payment/Transaction
+model Payment {
+  id            String    @id @default(cuid())
+  bookingId     String
+  booking       Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  customerId    String
+  customer      Customer  @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  
+  amount        Float
+  currency      String    @default("USD")
+  status        String    @default("pending") // pending, completed, failed, refunded
+  paymentMethod String?   // stripe, manual, etc.
+  stripePaymentIntentId String? @unique
+  transactionId String?   @unique
+  
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  @@index([bookingId])
+  @@index([customerId])
+  @@index([status])
+}
+
+// Notifications/Emails sent
+model Notification {
+  id            String    @id @default(cuid())
+  bookingId     String
+  booking       Booking   @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  type          String    // booking_submitted, confirmed, rejected, deposit_requested, etc.
+  recipientEmail String
+  subject       String
+  htmlContent   String?
+  status        String    @default("pending") // pending, sent, failed
+  sentAt        DateTime?
+  failureReason String?
+  createdAt     DateTime  @default(now())
+
+  @@index([bookingId])
+  @@index([type])
+  @@index([status])
+}
+
+// Site Settings
+model SiteSettings {
+  id                    String    @id @default(cuid())
+  siteName              String    @default("Ink & Needle Studio")
+  logo                  String?   // Cloudinary URL
+  businessEmail         String
+  businessPhone         String
+  businessAddress       String
+  businessCity          String
+  businessState         String
+  businessZip           String
+  businessCountry       String
+  
+  // Booking Rules
+  depositType           String    @default("fixed") // fixed, percentage, none
+  depositAmount         Float     @default(50)
+  depositPercentage     Float     @default(20)
+  bookingDuration       Int       @default(60) // in minutes
+  minBookingNotice      Int       @default(7)  // days
+  
+  // Social Links
+  instagramUrl          String?
+  facebookUrl           String?
+  tiktokUrl             String?
+  twitterUrl            String?
+  
+  // Business Hours
+  mondayStart           String    @default("10:00"
+  mondayEnd             String    @default("18:00")
+  tuesdayStart          String    @default("10:00")
+  tuesdayEnd            String    @default("18:00")
+  wednesdayStart        String    @default("10:00")
+  wednesdayEnd          String    @default("18:00")
+  thursdayStart         String    @default("10:00")
+  thursdayEnd           String    @default("18:00")
+  fridayStart           String    @default("10:00")
+  fridayEnd             String    @default("20:00")
+  saturdayStart         String    @default("12:00")
+  saturdayEnd           String    @default("20:00")
+  sundayClosed          Boolean   @default(true)
+  
+  currency              String    @default("USD")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+}
